@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.1)
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
@@ -8,14 +7,12 @@ set(MY_PROJECT_NAME HF_CSV)
 project(${MY_PROJECT_NAME} C)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-	add_executable(${MY_PROJECT_NAME}_test ./src/main.c)
+	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/debug)
 else()
-	if(WIN32)#hide console window on release
-		add_executable(${MY_PROJECT_NAME}_test WIN32 ./src/main.c)
-	else()
-		add_executable(${MY_PROJECT_NAME}_test ./src/main.c)
-	endif()
+	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/release)
 endif()
+
+add_executable(${MY_PROJECT_NAME}_test ./src/main.c)
 
 #export csv.c as dll
 add_definitions(-DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE -DBUILD_SHARED_LIBS=TRUE)
