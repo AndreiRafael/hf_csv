@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct HF_CSV_t {
+struct HF_CSV {
     char*** values;
     size_t rows;
     size_t columns;
