@@ -23,12 +23,27 @@ HF_CSV* hf_csv_create(size_t rows, size_t columns) {
     new_csv->rows = rows;
     new_csv->columns = columns;
 
-    // TODO: check malloc for errors
     new_csv->values = malloc(sizeof(char**) * rows);
+    if(!new_csv->values) {
+        hf_csv_destroy(new_csv);
+        return NULL;
+    }
+    memset(new_csv->values, 0, sizeof(char**) * rows);
+
     for(size_t row = 0; row < rows; row++) {
         new_csv->values[row] = malloc(sizeof(char*) * columns);
+        if(!new_csv->values[row]) {
+            hf_csv_destroy(new_csv);
+            return NULL;
+        }
+        memset(new_csv->values[row], 0, sizeof(char*) * columns);
+
         for(size_t column = 0; column < columns; column++) {
             new_csv->values[row][column] = malloc(sizeof(char));
+            if(!new_csv->values[row][column]) {
+                hf_csv_destroy(new_csv);
+                return NULL;
+            }
             new_csv->values[row][column][0] = '\0';
         }
     }
@@ -197,13 +212,19 @@ void hf_csv_destroy(HF_CSV* csv) {
         return;
     }
 
-    for(size_t row = 0; row < csv->rows; row++) {
-        for(size_t column = 0; column < csv->columns; column++) {
-            free(csv->values[row][column]);
+    if(csv->values) {
+        for(size_t row = 0; row < csv->rows; row++) {
+            if(csv->values[row]) {
+                for(size_t column = 0; column < csv->columns; column++) {
+                    if(csv->values[row][column]) {
+                        free(csv->values[row][column]);
+                    }
+                }
+                free(csv->values[row]);
+            }
         }
-        free(csv->values[row]);
+        free(csv->values);
     }
-    free(csv->values);
     free(csv);
 
     return;
