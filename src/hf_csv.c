@@ -374,7 +374,7 @@ bool hf_csv_find_column(HF_CSV* csv, size_t row, const char* value, size_t* colu
 }
 
 const char* hf_csv_get_value(HF_CSV* csv, size_t row, size_t column) {
-    if(!csv || row >= csv->columns || column >= csv->columns) {
+    if(!csv || row >= csv->rows || column >= csv->columns) {
         return NULL;
     }
 
