@@ -393,6 +393,20 @@ bool hf_csv_set_value(HF_CSV* csv, size_t row, size_t column, const char* value)
     return true;
 }
 
+bool hf_csv_get_size(HF_CSV* csv, size_t* rows, size_t* columns) {
+    if(!csv) {
+        return false;
+    }
+
+    if(rows) {
+        *rows = csv->rows;
+    }
+    if(columns) {
+        *columns = csv->columns;
+    }
+    return true;
+}
+
 bool hf_csv_resize(HF_CSV* csv, size_t rows, size_t columns) {
     if(!csv || rows == 0 || columns == 0) {
         return false;
