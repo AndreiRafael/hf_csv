@@ -50,7 +50,7 @@ bool hf_csv_set_value(HF_CSV* csv, size_t row, size_t column, const char* value)
 bool hf_csv_get_size(HF_CSV* csv, size_t* rows, size_t* columns);
 
 //Resizes a csv struct. If size is smaller, values out of bounds will be discarded. If new size is bigger, new values will be empty.
-//Returns true if operation was successful. Returns false if csv struct is invalid or any of the newly provided dimensions are 0.
+//Returns true if operation was successful. Returns false if csv struct is invalid, size is maintained or any of the newly provided dimensions are 0.
 bool hf_csv_resize(HF_CSV* csv, size_t rows, size_t columns);
 
 #endif//HF_CSV_H

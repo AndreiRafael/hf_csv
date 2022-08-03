@@ -387,7 +387,11 @@ bool hf_csv_set_value(HF_CSV* csv, size_t row, size_t column, const char* value)
     }
 
     size_t new_size = strlen(value) + 1;
-    csv->values[row][column] = realloc(csv->values[row][column], sizeof(char) * new_size);
+    void* new_str = realloc(csv->values[row][column], sizeof(char) * new_size);
+    if(!new_str) {
+        return false;
+    }
+    csv->values[row][column] = new_str;
     memcpy(csv->values[row][column], value, new_size);
 
     return true;
@@ -408,57 +412,35 @@ bool hf_csv_get_size(HF_CSV* csv, size_t* rows, size_t* columns) {
 }
 
 bool hf_csv_resize(HF_CSV* csv, size_t rows, size_t columns) {
-    if(!csv || rows == 0 || columns == 0) {
+    if(!csv || rows == 0 || columns == 0 || (rows == csv->rows && columns == csv->columns)) {
         return false;
-    }    
+    }
 
-    //changing row amount
-    if(rows > csv->rows) {//expand
-        csv->values = realloc(csv->values, sizeof(char**) * rows);
-        //alloc columns for each new row
-        for(size_t row = csv->rows; row < rows; row++) {
-            csv->values[row] = malloc(sizeof(char*) * csv->columns);
-            //insert empty data for each new column
-            for(size_t column = 0; column < csv->columns; column++) {
-                csv->values[row][column] = malloc(sizeof(char));
-                csv->values[row][column][0] = '\0';
-            }
-        }
+    //create a new csv to temporarily store values
+    HF_CSV* new_csv = hf_csv_create(rows, columns);
+    if(!new_csv) {
+        return false;
     }
-    else if(rows < csv->rows) {//shrink
-        for(size_t row = rows; row < rows; row++) {
-            //free all columns from unused rows
-            for(size_t column = 0; column < csv->columns; column++) {
-                free(csv->values[row][column]);
-            }
-            free(csv->values[row]);
-        }
-        csv->values = realloc(csv->values, sizeof(char**) * rows);
-    }
-    csv->rows = rows;
 
-    //changing column amount
-    if(columns > csv->columns) {//expand
-        //alloc new columns for all rows
-        for(size_t row = 0; row < csv->rows; row++) {
-            csv->values[row] = realloc(csv->values[row], sizeof(char*) * columns);
-            //insert empty data for each new column
-            for(size_t column = csv->columns; column < columns; column++) {
-                csv->values[row][column] = malloc(sizeof(char));
-                csv->values[row][column][0] = '\0';
+    size_t min_rows = csv->rows > rows ? rows : csv->rows;
+    size_t min_columns = csv->columns > columns ? columns : csv->columns;
+
+    //copy each value into new csv
+    for(size_t row = 0; row < min_rows; row++) {
+        for(size_t column = 0; column < min_columns; column++) {
+            bool res = hf_csv_set_value(new_csv, row, column, hf_csv_get_value(csv, row, column));
+            if(!res) {
+                hf_csv_destroy(new_csv);
+                return false;
             }
         }
     }
-    else if(columns < csv->columns) {//shrink
-        for(size_t row = 0; row < csv->rows; row++) {
-            //free all data from unused columns
-            for(size_t column = columns; column < csv->columns; column++) {
-                free(csv->values[row][column]);
-            }
-            csv->values[row] = realloc(csv->values[row], sizeof(char**) * columns);
-        }
-    }
-    csv->columns = columns;
+
+    //swap values between csv structs and free temp
+    HF_CSV temp_csv = *csv;
+    *csv = *new_csv;
+    *new_csv = temp_csv;
+    hf_csv_destroy(new_csv);
 
     return true;
 }
