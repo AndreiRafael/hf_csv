@@ -4,7 +4,7 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 set(MY_PROJECT_NAME HF_CSV) 
-project(${MY_PROJECT_NAME} C)
+project(${MY_PROJECT_NAME})
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/debug)
@@ -12,11 +12,9 @@ else()
 	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/release)
 endif()
 
-add_executable(${MY_PROJECT_NAME}_test ./src/main.c)
+add_library(${MY_PROJECT_NAME} STATIC ./src/hf_csv.c)
 
-#export csv.c as dll
-add_definitions(-DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE -DBUILD_SHARED_LIBS=TRUE)
-add_library(${MY_PROJECT_NAME} SHARED ./src/hf_csv.c)
+add_executable(${MY_PROJECT_NAME}_test ./src/main.c)
 
 # Make compiler scream out every possible warning
 if(MSVC)
@@ -27,7 +25,7 @@ else()
 	target_compile_options(${MY_PROJECT_NAME}_test PRIVATE -Wstrict-prototypes -Wconversion -Wall -Wextra -Wpedantic -pedantic -Werror)
 endif()
 
-target_link_libraries(${MY_PROJECT_NAME}_test ${MY_PROJECT_NAME})
+target_link_libraries(${MY_PROJECT_NAME}_test PUBLIC ${MY_PROJECT_NAME})
 
 #copy all resources
 file(GLOB_RECURSE resources ${CMAKE_SOURCE_DIR}/res/*.*)
