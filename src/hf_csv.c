@@ -65,8 +65,13 @@ HF_CSV* hf_csv_create_from_file(const char* filename) {
         }
 
         //transform file into a null-terminated string
-        rewind(file);
         char* string = malloc(arr_size);
+        if(!string) {
+            fclose(file);
+            return NULL;
+        }
+        rewind(file);
+        
         size_t curr_index = 0;
         while((c = (char)fgetc(file)) != EOF) {
             if(c == '\0') {//disregard null-terminator values
@@ -84,126 +89,158 @@ HF_CSV* hf_csv_create_from_file(const char* filename) {
     return NULL;
 }
 
-//aux func, call before assigning to a buffer to guarantee validity
-static void buffer_auto_resize(char** buffer, size_t* size, size_t index) {
-    while(index >= *size) {
-        *size += 128;
-        *buffer = realloc(*buffer, *size);
+//push a char to buffer at index, resize buffer if necessary
+static bool push_char_to_buffer(char value, size_t index, char** buffer_ptr, size_t* buffer_size_ptr) {
+    while(index >= *buffer_size_ptr) {
+        *buffer_size_ptr += 128;
+        void* new_memory = realloc(*buffer_ptr, *buffer_size_ptr);
+        if(!new_memory) {
+            return false;
+        }
+        *buffer_ptr = new_memory;
     }
+
+    (*buffer_ptr)[index] = value;
+    return true;
 }
 
-//aux func, call before setting the value of a csv entry
-static void new_csv_auto_resize(HF_CSV* csv, size_t row_index, size_t column_index) {
-    if(column_index >= csv->columns) {
-        hf_csv_resize(csv, csv->rows, column_index + 1);
+//given string pointer parses next value and inserts it into buffer. On success, modifies string pointer so that it points to the token that terminated the value
+static bool parse_value(const char** string_ptr, char** buffer_ptr, size_t* buffer_size_ptr) {
+    size_t buffer_index = 0;
+    const char* char_itr = *string_ptr;
+
+    bool is_quoted = *char_itr == '\"';
+    bool in_quotes = is_quoted;
+    if(is_quoted) {
+        char_itr++;
     }
-    if(row_index >= csv->rows) {
-        hf_csv_resize(csv, row_index + 1, csv->columns);
+
+    while(true) {
+        if(in_quotes) {//just read values, check for end of quotes
+            if(*char_itr == '\"') {
+                char peek = *(char_itr + 1);
+                if(peek == '\"') {//double quotes, push '\"'
+                    push_char_to_buffer('\"', buffer_index++, buffer_ptr, buffer_size_ptr);
+                    char_itr++;
+                }
+                else {
+                    in_quotes = false;
+                }
+            }
+            else {
+                push_char_to_buffer(*char_itr, buffer_index++, buffer_ptr, buffer_size_ptr);
+            }
+        }
+        else {
+            if(*char_itr == '\r') {//ignore carriage since not relevant(?) for parsing
+                char_itr++;
+            }
+
+            if(*char_itr == ',' || *char_itr == '\n' || *char_itr == '\0') {//end of value, null-terminate and check for end of string
+                if(*char_itr != '\0') {
+                    char peek = *(char_itr + 1);
+                    if(peek == '\0') {
+                        char_itr++;
+                    }
+                }
+
+                push_char_to_buffer('\0', buffer_index++, buffer_ptr, buffer_size_ptr);
+                *string_ptr = char_itr;
+                return true;
+            }
+
+            if(is_quoted) {//error, values found after end of quote
+                return false;
+            }
+            else if(*char_itr == '\"') {//error, quotes inside non quoted value
+                return false;
+            }
+
+            //simply push current value
+            push_char_to_buffer(*char_itr, buffer_index++, buffer_ptr, buffer_size_ptr);
+        }
+
+        char_itr++;
     }
 }
 
 HF_CSV* hf_csv_create_from_string(const char* string) {
-    size_t buffer_size = 128;
-    size_t buffer_index = 0;
-    char* buffer = malloc(buffer_size);
-
-    bool success = true;
-    size_t index = 0;
-
-    size_t curr_row = 0;
-    size_t curr_column = 0;
-
-    //start with a 1x1 table, resize as needed
-    HF_CSV* new_csv = hf_csv_create(1, 1);
-    while(success) {
-        char c = string[index];
-
-        if(c == '\0') {
-            success = success && ((curr_column == 0 && buffer_index == 0) || (curr_column + 1) == new_csv->columns);
-            break;
-        }
-        else if(c == '\n') {//go to next line
-            curr_row++;
-            curr_column = 0;
-            buffer_index = 0;
-
-            index++;
-        }
-        else if(c == '\"') {//quoted entry, read until end
-            while(true) {
-                c = string[++index];
-                if(c == '\"') {//next must be '\"' or ','/'\n'/'\0'
-                    char next_c = string[++index];
-                    if(next_c == '\"') {//double quote, push a single '\"'
-                        buffer_auto_resize(&buffer, &buffer_size, buffer_index);
-                        buffer[buffer_index++] = '\"';
-                    }
-                    else if(next_c == ',' || next_c == '\n' || next_c == '\0') {//ended quoted entry, push buffer
-                        buffer_auto_resize(&buffer, &buffer_size, buffer_index);
-                        buffer[buffer_index] = '\0';
-
-                        new_csv_auto_resize(new_csv, curr_row, curr_column);
-                        hf_csv_set_value(new_csv, curr_row, curr_column, buffer);
-                        buffer_index = 0;
-                        if(next_c == ',') {
-                            index++;
-                            curr_column++;
-                        }
-                        break;
-                    }
-                    else {//failure
-                        success = false;
-                        break;
-                    }
-                }
-                else if(c == '\0') {//failure
-                    success = false;
-                    break;
-                }
-                else {//push curr char to buffer
-                    buffer_auto_resize(&buffer, &buffer_size, buffer_index);
-                    buffer[buffer_index++] = c;
-                }
-            }
-
-        }//c == '\"'
-        else {//normal entry, read until ',' or '\0'
-            while(true) {
-                c = string[index];
-                if(c == ',' || c == '\0' || c == '\n') {//entry end
-                    buffer_auto_resize(&buffer, &buffer_size, buffer_index);
-                    buffer[buffer_index] = '\0';
-
-                    new_csv_auto_resize(new_csv, curr_row, curr_column);
-                    hf_csv_set_value(new_csv, curr_row, curr_column, buffer);
-                    buffer_index = 0;
-                    if(c == ',') {
-                        index++;
-                        curr_column++;
-                    }
-                    break;
-                }
-                else if(c == '\"') {//entry error
-                    success = false;
-                    break;
-                }
-                else {//push char to buffer
-                    buffer_auto_resize(&buffer, &buffer_size, buffer_index);
-                    buffer[buffer_index++] = c;
-
-                    index++;
-                }
-            }
-        }
-    }
-
-    free(buffer);
-
-    if(!success) {
-        hf_csv_destroy(new_csv);
+    if(!string) {
         return NULL;
     }
 
+    size_t buffer_size = 1;
+    char* buffer = malloc(buffer_size);
+    if(!buffer) {
+        return NULL;
+    }
+
+    const char* string_itr = string;
+
+    //first-pass, count values and basic error check
+    size_t row_count = 0;
+    size_t column_count = 0;
+    size_t curr_row = 0;
+    size_t curr_column = 0; 
+    do {
+        bool valid = parse_value(&string_itr, &buffer, &buffer_size);
+        if(!valid) {
+            free(buffer);
+            return NULL;
+        }
+
+        //only count columns in first row 
+        if(row_count == 0) {
+            column_count++;
+        }
+
+        curr_column++;
+        if(*string_itr == '\n' || *string_itr == '\0') {
+            if(curr_row != 0 && curr_column != column_count) {//invalid amout of columns
+                free(buffer);
+                return NULL;
+            }
+
+            row_count++;
+            curr_row++;
+            curr_column = 0;
+            if(*string_itr == '\0') {
+                break;
+            }
+        }
+
+        string_itr++;
+    } while(true);
+    
+    string_itr = string;
+    curr_row = 0;
+    curr_column = 0;
+
+    //start with a 1x1 table, resize as needed
+    HF_CSV* new_csv = hf_csv_create(row_count, column_count);
+    do {
+        parse_value(&string_itr, &buffer, &buffer_size);
+
+        if(!hf_csv_set_value(new_csv, curr_row, curr_column, buffer)) {//likely allocation error
+            hf_csv_destroy(new_csv);
+            free(buffer);
+            return NULL;
+        }
+
+        curr_column++;
+        if(*string_itr == '\n') {
+            curr_row++;
+            curr_column = 0;
+        }
+
+        if(*string_itr == '\0') {
+            break;
+        }
+
+        string_itr++;
+    } while(true);
+    
+    free(buffer);
     return new_csv;
 }
 

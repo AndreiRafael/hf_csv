@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <assert.h>
 
 #include "hf_csv.h"
 
@@ -61,6 +62,27 @@ int main(int argc, char* argv[]) {
     //Testing write lang file to disk
     hf_csv_to_file(loc_csv, "./lang_result.csv");
     hf_csv_destroy(loc_csv);
+
+    {//optional line feed test
+        HF_CSV* line_feed = hf_csv_create_from_file("./res/line_feed.csv");
+        assert(line_feed);
+        
+        char* line_feed_str = hf_csv_to_string(line_feed);
+        printf("\n\nline_feed csv:\n%s\n", line_feed_str);
+        free(line_feed_str);
+
+        hf_csv_destroy(line_feed);
+    }
+
+    {//badly formatted csv tests
+        HF_CSV* bad_column_count = hf_csv_create_from_file("./res/bad_column_count.csv");
+        assert(!bad_column_count);
+        hf_csv_destroy(bad_column_count);
+
+        HF_CSV* bad_quote = hf_csv_create_from_file("./res/bad_quote.csv");
+        assert(!bad_quote);
+        hf_csv_destroy(bad_quote);
+    }
 
     return 0;
 }

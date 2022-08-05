@@ -21,8 +21,8 @@ HF_CSV* hf_csv_create_from_string(const char* string);
 //Destroys a previously created HF_CSV struct, freeing allocated memory.
 void hf_csv_destroy(HF_CSV* csv);
 
-//Allocates a new string containing the csv contents.
-//Returns a valid char* on success, or NULL on failure.
+//Allocates a new string containing the csv contents. This pointer should be later freed by the user.
+//Returns a valid null-terminated char* on success, or NULL on failure.
 char* hf_csv_to_string(HF_CSV* csv);
 
 //Saves csv contents to a file.
