@@ -89,7 +89,7 @@ HF_CSV* hf_csv_create_from_file(const char* filename) {
     return NULL;
 }
 
-//push a char to buffer at index, resize buffer if necessary
+//push a char to buffer at index, resize buffer if necessary. returns false if buffer resize failed
 static bool push_char_to_buffer(char value, size_t index, char** buffer_ptr, size_t* buffer_size_ptr) {
     while(index >= *buffer_size_ptr) {
         *buffer_size_ptr += 128;
@@ -120,7 +120,9 @@ static bool parse_value(const char** string_ptr, char** buffer_ptr, size_t* buff
             if(*char_itr == '\"') {
                 char peek = *(char_itr + 1);
                 if(peek == '\"') {//double quotes, push '\"'
-                    push_char_to_buffer('\"', buffer_index++, buffer_ptr, buffer_size_ptr);
+                    if(!push_char_to_buffer('\"', buffer_index++, buffer_ptr, buffer_size_ptr)) {
+                        return false;
+                    }
                     char_itr++;
                 }
                 else {
@@ -128,7 +130,9 @@ static bool parse_value(const char** string_ptr, char** buffer_ptr, size_t* buff
                 }
             }
             else {
-                push_char_to_buffer(*char_itr, buffer_index++, buffer_ptr, buffer_size_ptr);
+                if(!push_char_to_buffer(*char_itr, buffer_index++, buffer_ptr, buffer_size_ptr)) {
+                    return false;
+                }
             }
         }
         else {
@@ -144,7 +148,9 @@ static bool parse_value(const char** string_ptr, char** buffer_ptr, size_t* buff
                     }
                 }
 
-                push_char_to_buffer('\0', buffer_index++, buffer_ptr, buffer_size_ptr);
+                if(!push_char_to_buffer('\0', buffer_index++, buffer_ptr, buffer_size_ptr)) {
+                    return false;
+                }
                 *string_ptr = char_itr;
                 return true;
             }
@@ -157,7 +163,9 @@ static bool parse_value(const char** string_ptr, char** buffer_ptr, size_t* buff
             }
 
             //simply push current value
-            push_char_to_buffer(*char_itr, buffer_index++, buffer_ptr, buffer_size_ptr);
+            if(!push_char_to_buffer(*char_itr, buffer_index++, buffer_ptr, buffer_size_ptr)) {
+                return false;
+            }
         }
 
         char_itr++;
@@ -169,7 +177,7 @@ HF_CSV* hf_csv_create_from_string(const char* string) {
         return NULL;
     }
 
-    size_t buffer_size = 1;
+    size_t buffer_size = 128;
     char* buffer = malloc(buffer_size);
     if(!buffer) {
         return NULL;
@@ -216,8 +224,13 @@ HF_CSV* hf_csv_create_from_string(const char* string) {
     curr_row = 0;
     curr_column = 0;
 
-    //start with a 1x1 table, resize as needed
+    //second pass, create csv and fill it with data
     HF_CSV* new_csv = hf_csv_create(row_count, column_count);
+    if(!new_csv) {
+        free(buffer);
+        return NULL;
+    }
+
     do {
         parse_value(&string_itr, &buffer, &buffer_size);
 
