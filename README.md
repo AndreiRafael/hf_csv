@@ -6,6 +6,4 @@ Build tested with CMake and MingW. There's a simple test program, and the librar
 
 # TODO:
 - Wrap everything in extern "C" and test C++ support.
-- Add some checks for failed memory allocations??
-- Review actual parsing part of the code, it's a bit of a mess with some unnecessarily repeated code.
 - Add Usage section to readme
