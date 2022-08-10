@@ -37,15 +37,6 @@ HF_CSV* hf_csv_create(size_t rows, size_t columns) {
             return NULL;
         }
         memset(new_csv->values[row], 0, sizeof(char*) * columns);
-
-        for(size_t column = 0; column < columns; column++) {
-            new_csv->values[row][column] = malloc(sizeof(char));
-            if(!new_csv->values[row][column]) {
-                hf_csv_destroy(new_csv);
-                return NULL;
-            }
-            new_csv->values[row][column][0] = '\0';
-        }
     }
     return new_csv;
 }
@@ -287,8 +278,8 @@ char* hf_csv_to_string(HF_CSV* csv) {
 
     size_t len = 1;
     for(size_t row = 0; row < csv->rows; row++) {
-        if(row != 0) {//add extra space for \n
-            len++;
+        if(row != 0) {//add extra space for \r\n
+            len += 2;
         }
 
         for(size_t column = 0; column < csv->columns; column++) {
@@ -297,6 +288,10 @@ char* hf_csv_to_string(HF_CSV* csv) {
             }
 
             const char* value = csv->values[row][column];
+            if(!value) {//uninitialized value
+                continue;
+            }
+
             size_t value_len = strlen(value);
             len += value_len;
 
@@ -323,16 +318,21 @@ char* hf_csv_to_string(HF_CSV* csv) {
 
     size_t index = 0;
     for(size_t row = 0; row < csv->rows; row++) {
-        if(row != 0) {//add extra space for \n
+        if(row != 0) {
+            out_string[index++] = '\r';
             out_string[index++] = '\n';
         }
 
         for(size_t column = 0; column < csv->columns; column++) {
-            if(column != 0) {//add extra space for comma
+            if(column != 0) {
                 out_string[index++] = ',';
             }
 
             const char* value = csv->values[row][column];
+            if(!value) {//uninitialized value
+                continue;
+            }
+
             size_t value_len = strlen(value);
 
             //check if quotes are needed
@@ -428,7 +428,11 @@ const char* hf_csv_get_value(HF_CSV* csv, size_t row, size_t column) {
         return NULL;
     }
 
-    return csv->values[row][column];
+    const char* value = csv->values[row][column];
+    if(!value) {
+        return "";
+    }
+    return value;
 }
 
 bool hf_csv_set_value(HF_CSV* csv, size_t row, size_t column, const char* value) {
@@ -437,7 +441,7 @@ bool hf_csv_set_value(HF_CSV* csv, size_t row, size_t column, const char* value)
     }
 
     size_t new_size = strlen(value) + 1;
-    void* new_str = realloc(csv->values[row][column], sizeof(char) * new_size);
+    char* new_str = realloc(csv->values[row][column], sizeof(char) * new_size);
     if(!new_str) {
         return false;
     }

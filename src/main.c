@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <assert.h>
 
 #include "hf_csv.h"
@@ -73,7 +74,6 @@ int main(int argc, char* argv[]) {
 
         hf_csv_destroy(line_feed);
     }
-
     {//badly formatted csv tests
         HF_CSV* bad_column_count = hf_csv_create_from_file("./res/bad_column_count.csv");
         assert(!bad_column_count);
@@ -82,6 +82,26 @@ int main(int argc, char* argv[]) {
         HF_CSV* bad_quote = hf_csv_create_from_file("./res/bad_quote.csv");
         assert(!bad_quote);
         hf_csv_destroy(bad_quote);
+    }
+    {//carriage return
+        const char* carriage_src = "a,b,c\r\nd,e,f\r\ng,h,i";
+        HF_CSV* carriage = hf_csv_create_from_string(carriage_src);
+        assert(carriage);
+
+        char* carriage_str = hf_csv_to_string(carriage);
+        assert(carriage_str);
+
+        assert(strlen(carriage_src) == strlen(carriage_str));
+        free(carriage_str);
+
+        hf_csv_destroy(carriage);
+    }
+    {//non carriage
+        const char* line_feed_src = "a,b,c\nd,e,f\ng,h,i";
+        HF_CSV* line_feed_csv = hf_csv_create_from_string(line_feed_src);
+        assert(line_feed_csv);
+
+        hf_csv_destroy(line_feed_csv);
     }
 
     return 0;

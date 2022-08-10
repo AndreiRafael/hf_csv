@@ -42,7 +42,7 @@ bool hf_csv_find_row(HF_CSV* csv, size_t column, const char* value, size_t* row)
 bool hf_csv_find_column(HF_CSV* csv, size_t row, const char* value, size_t* column);
 
 //Gets a value from csv at specified row and column.
-//This pointer may become invalid once the csv struct is modified in any way, and its contents should NOT be modified directly.
+//This pointer may become invalid once the csv struct is modified in any way, and its contents should NOT be freed or modified directly.
 //Returns pointer to value if inside bounds of csv file, NULL otherwise.
 const char* hf_csv_get_value(HF_CSV* csv, size_t row, size_t column);
 
