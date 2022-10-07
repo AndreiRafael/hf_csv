@@ -6,3 +6,4 @@ Built using CMake, tested with MingW. There's a simple test program, where the l
 
 # TODO:
 - Add Usage section to readme
+- Allow custom allocators & make better memory layout
