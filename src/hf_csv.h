@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-typedef struct HF_CSV HF_CSV;
+typedef struct HF_CSV_s HF_CSV;
 
 #ifdef __cplusplus
 extern "C" {
