@@ -2,6 +2,7 @@
 #include <string.h>
 #include <assert.h>
 
+#define HF_CSV_IMPLEMENTATION
 #include "hf_csv.h"
 
 int main(int argc, char* argv[]) {

@@ -12,20 +12,14 @@ else()
 	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/release)
 endif()
 
-add_library(${MY_PROJECT_NAME} STATIC ./src/hf_csv.c)
-
 add_executable(${MY_PROJECT_NAME}_test ./src/main.c)
 
 # Make compiler scream out every possible warning
 if(MSVC)
-	target_compile_options(${MY_PROJECT_NAME} PRIVATE /W4 /WX)
 	target_compile_options(${MY_PROJECT_NAME}_test PRIVATE /W4 /WX)
 else()
-	target_compile_options(${MY_PROJECT_NAME} PRIVATE -Wstrict-prototypes -Wconversion -Wall -Wextra -Wpedantic -pedantic -Werror)
 	target_compile_options(${MY_PROJECT_NAME}_test PRIVATE -Wstrict-prototypes -Wconversion -Wall -Wextra -Wpedantic -pedantic -Werror)
 endif()
-
-target_link_libraries(${MY_PROJECT_NAME}_test PUBLIC ${MY_PROJECT_NAME})
 
 #copy all resources
 file(GLOB_RECURSE resources ${CMAKE_SOURCE_DIR}/res/*.*)
