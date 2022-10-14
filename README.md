@@ -9,4 +9,3 @@ To use the library, include hf_csv.h. In one of your source files, HF_CSV_IMPLEM
 
 # TODO:
 - Complete Usage section of readme
-- Cleanup of internal functions from hf_csv.h making user namespace dirty
