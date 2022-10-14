@@ -69,87 +69,39 @@ bool hf_csv_resize(HF_CSV* csv, size_t rows, size_t columns);
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef HF_CSV_MALLOC
+#define HF_CSV_MALLOC(size) malloc(size)
+#endif//HF_CSV_MALLOC
+#ifndef HF_CSV_FREE
+#define HF_CSV_FREE(mem_ptr) free(mem_ptr)
+#endif//HF_CSV_FREE
+#ifndef HF_CSV_REALLOC
+#define HF_CSV_REALLOC(mem_ptr, size) realloc(mem_ptr, size)
+#endif//HF_CSV_REALLOC
+
 struct HF_CSV_s {
     char*** values;
     size_t rows;
     size_t columns;
 };
 
-HF_CSV* hf_csv_create(size_t rows, size_t columns) {
-    if(rows == 0 || columns == 0) {
+static FILE* hf_csv__fopen(const char* filename, const char* mode) {
+    FILE* file;
+#if defined(_MSC_VER) && _MSC_VER >= 1400
+    if(fopen_s(&file, filename, mode)) {
         return NULL;
     }
-
-    HF_CSV* new_csv = malloc(sizeof(HF_CSV));
-    if(!new_csv) {//failed alloc
-        return NULL;
-    }
-
-    new_csv->rows = rows;
-    new_csv->columns = columns;
-
-    new_csv->values = malloc(sizeof(char**) * rows);
-    if(!new_csv->values) {
-        hf_csv_destroy(new_csv);
-        return NULL;
-    }
-    memset(new_csv->values, 0, sizeof(char**) * rows);
-
-    for(size_t row = 0; row < rows; row++) {
-        new_csv->values[row] = malloc(sizeof(char*) * columns);
-        if(!new_csv->values[row]) {
-            hf_csv_destroy(new_csv);
-            return NULL;
-        }
-        memset(new_csv->values[row], 0, sizeof(char*) * columns);
-    }
-    return new_csv;
-}
-
-HF_CSV* hf_csv_create_from_file(const char* filename) {
-    FILE* file = fopen(filename, "r");
-    if(file) {
-        size_t arr_size = 1;
-
-        //calc file character count
-        char c;
-        while((c = (char)fgetc(file)) != EOF) {
-            if(c == '\0') {//disregard null-terminator values
-                continue;
-            }
-            arr_size++;
-        }
-
-        //transform file into a null-terminated string
-        char* string = malloc(arr_size);
-        if(!string) {
-            fclose(file);
-            return NULL;
-        }
-        rewind(file);
-        
-        size_t curr_index = 0;
-        while((c = (char)fgetc(file)) != EOF) {
-            if(c == '\0') {//disregard null-terminator values
-                continue;
-            }
-            string[curr_index++] = c;
-        }
-        string[curr_index] = '\0';
-        fclose(file);
-
-        HF_CSV* new_csv = hf_csv_create_from_string(string);
-        free(string);
-        return new_csv;
-    }
-    return NULL;
+#else
+    file = fopen(filename, mode);
+#endif
+    return file;
 }
 
 //push a char to buffer at index, resize buffer if necessary. returns false if buffer resize failed
-static bool hf_csv_internal_push_char_to_buffer(char value, size_t index, char** buffer_ptr, size_t* buffer_size_ptr) {
+static bool hf_csv__push_char_to_buffer(char value, size_t index, char** buffer_ptr, size_t* buffer_size_ptr) {
     while(index >= *buffer_size_ptr) {
         *buffer_size_ptr += 128;
-        void* new_memory = realloc(*buffer_ptr, *buffer_size_ptr);
+        void* new_memory = HF_CSV_REALLOC(*buffer_ptr, *buffer_size_ptr);
         if(!new_memory) {
             return false;
         }
@@ -161,7 +113,7 @@ static bool hf_csv_internal_push_char_to_buffer(char value, size_t index, char**
 }
 
 //given string pointer parses next value and inserts it into buffer. On success, modifies string pointer so that it points to the token that terminated the value
-static bool hf_csv_internal_parse_value(const char** string_ptr, char** buffer_ptr, size_t* buffer_size_ptr) {
+static bool hf_csv__parse_value(const char** string_ptr, char** buffer_ptr, size_t* buffer_size_ptr) {
     size_t buffer_index = 0;
     const char* char_itr = *string_ptr;
 
@@ -176,7 +128,7 @@ static bool hf_csv_internal_parse_value(const char** string_ptr, char** buffer_p
             if(*char_itr == '\"') {
                 char peek = *(char_itr + 1);
                 if(peek == '\"') {//double quotes, push '\"'
-                    if(!hf_csv_internal_push_char_to_buffer('\"', buffer_index++, buffer_ptr, buffer_size_ptr)) {
+                    if(!hf_csv__push_char_to_buffer('\"', buffer_index++, buffer_ptr, buffer_size_ptr)) {
                         return false;
                     }
                     char_itr++;
@@ -186,7 +138,7 @@ static bool hf_csv_internal_parse_value(const char** string_ptr, char** buffer_p
                 }
             }
             else {
-                if(!hf_csv_internal_push_char_to_buffer(*char_itr, buffer_index++, buffer_ptr, buffer_size_ptr)) {
+                if(!hf_csv__push_char_to_buffer(*char_itr, buffer_index++, buffer_ptr, buffer_size_ptr)) {
                     return false;
                 }
             }
@@ -204,7 +156,7 @@ static bool hf_csv_internal_parse_value(const char** string_ptr, char** buffer_p
                     }
                 }
 
-                if(!hf_csv_internal_push_char_to_buffer('\0', buffer_index++, buffer_ptr, buffer_size_ptr)) {
+                if(!hf_csv__push_char_to_buffer('\0', buffer_index++, buffer_ptr, buffer_size_ptr)) {
                     return false;
                 }
                 *string_ptr = char_itr;
@@ -219,7 +171,7 @@ static bool hf_csv_internal_parse_value(const char** string_ptr, char** buffer_p
             }
 
             //simply push current value
-            if(!hf_csv_internal_push_char_to_buffer(*char_itr, buffer_index++, buffer_ptr, buffer_size_ptr)) {
+            if(!hf_csv__push_char_to_buffer(*char_itr, buffer_index++, buffer_ptr, buffer_size_ptr)) {
                 return false;
             }
         }
@@ -228,13 +180,83 @@ static bool hf_csv_internal_parse_value(const char** string_ptr, char** buffer_p
     }
 }
 
+HF_CSV* hf_csv_create(size_t rows, size_t columns) {
+    if(rows == 0 || columns == 0) {
+        return NULL;
+    }
+
+    HF_CSV* new_csv = HF_CSV_MALLOC(sizeof(HF_CSV));
+    if(!new_csv) {//failed alloc
+        return NULL;
+    }
+
+    new_csv->rows = rows;
+    new_csv->columns = columns;
+
+    new_csv->values = HF_CSV_MALLOC(sizeof(char**) * rows);
+    if(!new_csv->values) {
+        hf_csv_destroy(new_csv);
+        return NULL;
+    }
+    memset(new_csv->values, 0, sizeof(char**) * rows);
+
+    for(size_t row = 0; row < rows; row++) {
+        new_csv->values[row] = HF_CSV_MALLOC(sizeof(char*) * columns);
+        if(!new_csv->values[row]) {
+            hf_csv_destroy(new_csv);
+            return NULL;
+        }
+        memset(new_csv->values[row], 0, sizeof(char*) * columns);
+    }
+    return new_csv;
+}
+
+HF_CSV* hf_csv_create_from_file(const char* filename) {
+    FILE* file = hf_csv__fopen(filename, "r");
+    if(file) {
+        size_t arr_size = 1;
+
+        //calc file character count
+        char c;
+        while((c = (char)fgetc(file)) != EOF) {
+            if(c == '\0') {//disregard null-terminator values
+                continue;
+            }
+            arr_size++;
+        }
+
+        //transform file into a null-terminated string
+        char* string = HF_CSV_MALLOC(arr_size);
+        if(!string) {
+            fclose(file);
+            return NULL;
+        }
+        rewind(file);
+        
+        size_t curr_index = 0;
+        while((c = (char)fgetc(file)) != EOF) {
+            if(c == '\0') {//disregard null-terminator values
+                continue;
+            }
+            string[curr_index++] = c;
+        }
+        string[curr_index] = '\0';
+        fclose(file);
+
+        HF_CSV* new_csv = hf_csv_create_from_string(string);
+        HF_CSV_FREE(string);
+        return new_csv;
+    }
+    return NULL;
+}
+
 HF_CSV* hf_csv_create_from_string(const char* string) {
     if(!string) {
         return NULL;
     }
 
     size_t buffer_size = 128;
-    char* buffer = malloc(buffer_size);
+    char* buffer = HF_CSV_MALLOC(buffer_size);
     if(!buffer) {
         return NULL;
     }
@@ -247,9 +269,9 @@ HF_CSV* hf_csv_create_from_string(const char* string) {
     size_t curr_row = 0;
     size_t curr_column = 0; 
     do {
-        bool valid = hf_csv_internal_parse_value(&string_itr, &buffer, &buffer_size);
+        bool valid = hf_csv__parse_value(&string_itr, &buffer, &buffer_size);
         if(!valid) {
-            free(buffer);
+            HF_CSV_FREE(buffer);
             return NULL;
         }
 
@@ -261,7 +283,7 @@ HF_CSV* hf_csv_create_from_string(const char* string) {
         curr_column++;
         if(*string_itr == '\n' || *string_itr == '\0') {
             if(curr_row != 0 && curr_column != column_count) {//invalid amout of columns
-                free(buffer);
+                HF_CSV_FREE(buffer);
                 return NULL;
             }
 
@@ -283,16 +305,16 @@ HF_CSV* hf_csv_create_from_string(const char* string) {
     //second pass, create csv and fill it with data
     HF_CSV* new_csv = hf_csv_create(row_count, column_count);
     if(!new_csv) {
-        free(buffer);
+        HF_CSV_FREE(buffer);
         return NULL;
     }
 
     do {
-        hf_csv_internal_parse_value(&string_itr, &buffer, &buffer_size);
+        hf_csv__parse_value(&string_itr, &buffer, &buffer_size);
 
         if(!hf_csv_set_value(new_csv, curr_row, curr_column, buffer)) {//likely allocation error
             hf_csv_destroy(new_csv);
-            free(buffer);
+            HF_CSV_FREE(buffer);
             return NULL;
         }
 
@@ -309,7 +331,7 @@ HF_CSV* hf_csv_create_from_string(const char* string) {
         string_itr++;
     } while(true);
     
-    free(buffer);
+    HF_CSV_FREE(buffer);
     return new_csv;
 }
 
@@ -323,15 +345,15 @@ void hf_csv_destroy(HF_CSV* csv) {
             if(csv->values[row]) {
                 for(size_t column = 0; column < csv->columns; column++) {
                     if(csv->values[row][column]) {
-                        free(csv->values[row][column]);
+                        HF_CSV_FREE(csv->values[row][column]);
                     }
                 }
-                free(csv->values[row]);
+                HF_CSV_FREE(csv->values[row]);
             }
         }
-        free(csv->values);
+        HF_CSV_FREE(csv->values);
     }
-    free(csv);
+    HF_CSV_FREE(csv);
 
     return;
 }
@@ -376,7 +398,7 @@ char* hf_csv_to_string(HF_CSV* csv) {
         }
     }
 
-    char* out_string = malloc(len);
+    char* out_string = HF_CSV_MALLOC(len);
     if(!out_string) {
         return NULL;
     }
@@ -435,7 +457,7 @@ char* hf_csv_to_string(HF_CSV* csv) {
 }
 
 bool hf_csv_to_file(HF_CSV* csv, const char* filename) {
-    FILE* file = fopen(filename, "w");
+    FILE* file = hf_csv__fopen(filename, "w");
     if(!file) {
         return false;
     }
@@ -447,7 +469,7 @@ bool hf_csv_to_file(HF_CSV* csv, const char* filename) {
 
     fprintf(file, "%s", string);
 
-    free(string);
+    HF_CSV_FREE(string);
     fclose(file);
     return true;
 }
@@ -506,7 +528,7 @@ bool hf_csv_set_value(HF_CSV* csv, size_t row, size_t column, const char* value)
     }
 
     size_t new_size = strlen(value) + 1;
-    char* new_str = realloc(csv->values[row][column], sizeof(char) * new_size);
+    char* new_str = HF_CSV_REALLOC(csv->values[row][column], sizeof(char) * new_size);
     if(!new_str) {
         return false;
     }
