@@ -51,3 +51,7 @@ _deps
 # Ninja
 .ninja_deps
 .ninja_log
+
+#zig cc build folders
+zig-cache
+zig-out
