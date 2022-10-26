@@ -26,19 +26,19 @@ int main(int argc, char* argv[]) {
 
     char* my_csv_string = hf_csv_to_string(my_csv);
     printf("\n\nmy_csv_string pre resize:\n%s", my_csv_string);
-    free(my_csv_string);
+    hf_csv_free_string(my_csv_string);
 
     hf_csv_to_file(my_csv, "./result.csv");
 
     hf_csv_resize(my_csv, 2, 2);
     my_csv_string = hf_csv_to_string(my_csv);
     printf("\n\nmy_csv_string after resize 1:\n%s", my_csv_string);
-    free(my_csv_string);
+    hf_csv_free_string(my_csv_string);
 
     hf_csv_resize(my_csv, 3, 3);
     my_csv_string = hf_csv_to_string(my_csv);
     printf("\n\nmy_csv_string after resize 2:\n%s", my_csv_string);
-    free(my_csv_string);
+    hf_csv_free_string(my_csv_string);
     hf_csv_destroy(my_csv);
 
     //Localization testing
@@ -71,7 +71,7 @@ int main(int argc, char* argv[]) {
         
         char* line_feed_str = hf_csv_to_string(line_feed);
         printf("\n\nline_feed csv:\n%s\n", line_feed_str);
-        free(line_feed_str);
+        hf_csv_free_string(line_feed_str);
 
         hf_csv_destroy(line_feed);
     }
@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
         assert(carriage_str);
 
         assert(strlen(carriage_src) == strlen(carriage_str));
-        free(carriage_str);
+        hf_csv_free_string(carriage_str);
 
         hf_csv_destroy(carriage);
     }

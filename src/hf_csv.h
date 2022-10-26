@@ -25,9 +25,12 @@ HF_CSV* hf_csv_create_from_string(const char* string);
 //Destroys a previously created HF_CSV struct, freeing allocated memory.
 void hf_csv_destroy(HF_CSV* csv);
 
-//Allocates a new string containing the csv contents. This pointer should be later freed by the user.
+//Allocates a new string containing the csv contents. This pointer should be later freed by the user using hf_csv_free_string.
 //Returns a valid null-terminated char* on success, or NULL on failure.
 char* hf_csv_to_string(HF_CSV* csv);
+
+//Frees a string previously allocated bys hf_csv_to_string.
+void hf_csv_free_string(char* string);
 
 //Saves csv contents to a file.
 //Returns true if operation was successful.
@@ -101,7 +104,7 @@ static FILE* hf_csv__fopen(const char* filename, const char* mode) {
 static bool hf_csv__push_char_to_buffer(char value, size_t index, char** buffer_ptr, size_t* buffer_size_ptr) {
     while(index >= *buffer_size_ptr) {
         *buffer_size_ptr += 128;
-        void* new_memory = HF_CSV_REALLOC(*buffer_ptr, *buffer_size_ptr);
+        char* new_memory = (char*)HF_CSV_REALLOC(*buffer_ptr, *buffer_size_ptr);
         if(!new_memory) {
             return false;
         }
@@ -185,7 +188,7 @@ HF_CSV* hf_csv_create(size_t rows, size_t columns) {
         return NULL;
     }
 
-    HF_CSV* new_csv = HF_CSV_MALLOC(sizeof(HF_CSV));
+    HF_CSV* new_csv = (HF_CSV*)HF_CSV_MALLOC(sizeof(HF_CSV));
     if(!new_csv) {//failed alloc
         return NULL;
     }
@@ -193,7 +196,7 @@ HF_CSV* hf_csv_create(size_t rows, size_t columns) {
     new_csv->rows = rows;
     new_csv->columns = columns;
 
-    new_csv->values = HF_CSV_MALLOC(sizeof(char**) * rows);
+    new_csv->values = (char***)HF_CSV_MALLOC(sizeof(char**) * rows);
     if(!new_csv->values) {
         hf_csv_destroy(new_csv);
         return NULL;
@@ -201,7 +204,7 @@ HF_CSV* hf_csv_create(size_t rows, size_t columns) {
     memset(new_csv->values, 0, sizeof(char**) * rows);
 
     for(size_t row = 0; row < rows; row++) {
-        new_csv->values[row] = HF_CSV_MALLOC(sizeof(char*) * columns);
+        new_csv->values[row] = (char**)HF_CSV_MALLOC(sizeof(char*) * columns);
         if(!new_csv->values[row]) {
             hf_csv_destroy(new_csv);
             return NULL;
@@ -226,7 +229,7 @@ HF_CSV* hf_csv_create_from_file(const char* filename) {
         }
 
         //transform file into a null-terminated string
-        char* string = HF_CSV_MALLOC(arr_size);
+        char* string = (char*)HF_CSV_MALLOC(arr_size);
         if(!string) {
             fclose(file);
             return NULL;
@@ -256,7 +259,7 @@ HF_CSV* hf_csv_create_from_string(const char* string) {
     }
 
     size_t buffer_size = 128;
-    char* buffer = HF_CSV_MALLOC(buffer_size);
+    char* buffer = (char*)HF_CSV_MALLOC(buffer_size);
     if(!buffer) {
         return NULL;
     }
@@ -398,7 +401,7 @@ char* hf_csv_to_string(HF_CSV* csv) {
         }
     }
 
-    char* out_string = HF_CSV_MALLOC(len);
+    char* out_string = (char*)HF_CSV_MALLOC(len);
     if(!out_string) {
         return NULL;
     }
@@ -456,6 +459,10 @@ char* hf_csv_to_string(HF_CSV* csv) {
     return out_string;
 }
 
+void hf_csv_free_string(char* string) {
+    HF_CSV_FREE(string);
+}
+
 bool hf_csv_to_file(HF_CSV* csv, const char* filename) {
     FILE* file = hf_csv__fopen(filename, "w");
     if(!file) {
@@ -469,7 +476,7 @@ bool hf_csv_to_file(HF_CSV* csv, const char* filename) {
 
     fprintf(file, "%s", string);
 
-    HF_CSV_FREE(string);
+    hf_csv_free_string(string);
     fclose(file);
     return true;
 }
@@ -528,7 +535,7 @@ bool hf_csv_set_value(HF_CSV* csv, size_t row, size_t column, const char* value)
     }
 
     size_t new_size = strlen(value) + 1;
-    char* new_str = HF_CSV_REALLOC(csv->values[row][column], sizeof(char) * new_size);
+    char* new_str = (char*)HF_CSV_REALLOC(csv->values[row][column], sizeof(char) * new_size);
     if(!new_str) {
         return false;
     }
