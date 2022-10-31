@@ -9,3 +9,4 @@ To use the library, include hf_csv.h. In one of your source files, HF_CSV_IMPLEM
 
 # TODO:
 - Complete Usage section of readme
+- Rewrite documentation comments to contemplate custom allocator changes

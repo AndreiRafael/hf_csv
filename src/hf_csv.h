@@ -6,35 +6,41 @@
 
 typedef struct HF_CSV_s HF_CSV;
 
+typedef struct HF_CSV_AllocatorData_s {
+    void* allocator;
+    void*(*malloc_ptr)(void*, size_t);
+    void*(*realloc_ptr)(void*, void*, size_t);
+    void(*free_ptr)(void*, void*);
+} HF_CSV_AllocatorData;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-//Creates a new csv struct with given dimensions.
+//Creates a new csv struct with given dimensions. Optionally, a custom allocator may be provided.
 //returns a newly allocated HF_CSV struct on success, NULL if any of the dimensions is 0.
-HF_CSV* hf_csv_create(size_t rows, size_t columns);
+HF_CSV* hf_csv_create(size_t rows, size_t columns, HF_CSV_AllocatorData* allocator_data);
 
 //Creates a csv struct from a file
 //returns a newly allocated HF_CSV struct on success, NULL if file does not exist.
-HF_CSV* hf_csv_create_from_file(const char* filename);
+HF_CSV* hf_csv_create_from_file(const char* filename, HF_CSV_AllocatorData* allocator_data);
 
 //Creates a csv struct from a formatted string. Such string MUST be null-terminated.
 //returns a newly allocated HF_CSV struct on success, or NULL if failed to parse.
-HF_CSV* hf_csv_create_from_string(const char* string);
+HF_CSV* hf_csv_create_from_string(const char* string, HF_CSV_AllocatorData* allocator_data);
 
 //Destroys a previously created HF_CSV struct, freeing allocated memory.
 void hf_csv_destroy(HF_CSV* csv);
 
-//Allocates a new string containing the csv contents. This pointer should be later freed by the user using hf_csv_free_string.
+//Allocates a new string containing the csv contents. Memory allocated by this fuction is of respinsability of the user.
 //Returns a valid null-terminated char* on success, or NULL on failure.
-char* hf_csv_to_string(HF_CSV* csv);
-
+char* hf_csv_to_string(HF_CSV* csv, HF_CSV_AllocatorData* allocator_data);
 //Frees a string previously allocated bys hf_csv_to_string.
-void hf_csv_free_string(char* string);
+void hf_csv_free_string(char* string, HF_CSV_AllocatorData* allocator_data);
 
 //Saves csv contents to a file.
 //Returns true if operation was successful.
-bool hf_csv_to_file(HF_CSV* csv, const char* filename);
+bool hf_csv_to_file(HF_CSV* csv, const char* filename, HF_CSV_AllocatorData* allocator_data);
 
 //Search for row containing value in the specified column of csv. Value string MUST be null-terminated.
 //Returns true if value is found. If so, row index is saved to the provided row pointer.
@@ -68,29 +74,45 @@ bool hf_csv_resize(HF_CSV* csv, size_t rows, size_t columns);
 
 #ifdef HF_CSV_IMPLEMENTATION
 
+#ifndef HF_CSV_MALLOC
+#define HF_CSV_MALLOC(size) malloc(size)
+#endif//HF_CSV_MALLOC
+
+#ifndef HF_CSV_REALLOC
+#define HF_CSV_REALLOC(mem_ptr, new_size) realloc(mem_ptr, new_size)
+#endif//HF_CSV_REALLOC
+
+#ifndef HF_CSV_FREE
+#define HF_CSV_FREE(mem_ptr) free(mem_ptr)
+#endif//HF_CSV_FREE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef HF_CSV_MALLOC
-#define HF_CSV_MALLOC(size) malloc(size)
-#endif//HF_CSV_MALLOC
-#ifndef HF_CSV_FREE
-#define HF_CSV_FREE(mem_ptr) free(mem_ptr)
-#endif//HF_CSV_FREE
-#ifndef HF_CSV_REALLOC
-#define HF_CSV_REALLOC(mem_ptr, size) realloc(mem_ptr, size)
-#endif//HF_CSV_REALLOC
+typedef enum HF_CSV_Mode_e {
+    HF_CSV_MODE_STD,
+    HF_CSV_MODE_CUSTOM
+} HF_CSV_Mode;
 
 struct HF_CSV_s {
     char*** values;
     size_t rows;
     size_t columns;
+    HF_CSV_Mode mode;
 };
 
-static FILE* hf_csv__fopen(const char* filename, const char* mode) {
+typedef struct HF_CSV_Custom_s {
+    char*** values;
+    size_t rows;
+    size_t columns;
+    HF_CSV_Mode mode;
+    HF_CSV_AllocatorData allocator_data;
+} HF_CSV_Custom;
+
+static inline FILE* hf_csv__fopen(const char* filename, const char* mode) {
     FILE* file;
-#if defined(_MSC_VER) && _MSC_VER >= 1400
+#if _MSC_VER >= 1400
     if(fopen_s(&file, filename, mode)) {
         return NULL;
     }
@@ -100,11 +122,40 @@ static FILE* hf_csv__fopen(const char* filename, const char* mode) {
     return file;
 }
 
+static inline HF_CSV_AllocatorData* hf_csv__get_allocator_data(HF_CSV* csv) {
+    return csv->mode == HF_CSV_MODE_CUSTOM ? &((HF_CSV_Custom*)csv)->allocator_data : NULL;
+}
+
+static inline void* hf_csv__malloc(HF_CSV_AllocatorData* allocator_data, size_t size) {
+    if (!allocator_data) {
+        return HF_CSV_MALLOC(size);
+    }
+
+    return allocator_data->malloc_ptr(allocator_data->allocator, size);
+}
+
+static inline void* hf_csv__realloc(HF_CSV_AllocatorData* allocator_data, void* mem_ptr, size_t new_size) {
+    if(!allocator_data) {
+        return HF_CSV_REALLOC(mem_ptr, new_size);
+    }
+
+    return allocator_data->realloc_ptr(allocator_data->allocator, mem_ptr, new_size);
+}
+
+static inline void hf_csv__free(HF_CSV_AllocatorData* allocator_data, void* mem_ptr) {
+    if(!allocator_data) {
+        HF_CSV_FREE(mem_ptr);
+        return;
+    }
+
+    allocator_data->free_ptr(allocator_data->allocator, mem_ptr);
+}
+
 //push a char to buffer at index, resize buffer if necessary. returns false if buffer resize failed
-static bool hf_csv__push_char_to_buffer(char value, size_t index, char** buffer_ptr, size_t* buffer_size_ptr) {
+static bool hf_csv__push_char_to_buffer(char value, size_t index, char** buffer_ptr, size_t* buffer_size_ptr, HF_CSV_AllocatorData* allocator_data) {
     while(index >= *buffer_size_ptr) {
         *buffer_size_ptr += 128;
-        char* new_memory = (char*)HF_CSV_REALLOC(*buffer_ptr, *buffer_size_ptr);
+        char* new_memory = (char*)hf_csv__realloc(allocator_data, *buffer_ptr, *buffer_size_ptr);
         if(!new_memory) {
             return false;
         }
@@ -116,7 +167,7 @@ static bool hf_csv__push_char_to_buffer(char value, size_t index, char** buffer_
 }
 
 //given string pointer parses next value and inserts it into buffer. On success, modifies string pointer so that it points to the token that terminated the value
-static bool hf_csv__parse_value(const char** string_ptr, char** buffer_ptr, size_t* buffer_size_ptr) {
+static bool hf_csv__parse_value(const char** string_ptr, char** buffer_ptr, size_t* buffer_size_ptr, HF_CSV_AllocatorData* allocator_data) {
     size_t buffer_index = 0;
     const char* char_itr = *string_ptr;
 
@@ -131,7 +182,7 @@ static bool hf_csv__parse_value(const char** string_ptr, char** buffer_ptr, size
             if(*char_itr == '\"') {
                 char peek = *(char_itr + 1);
                 if(peek == '\"') {//double quotes, push '\"'
-                    if(!hf_csv__push_char_to_buffer('\"', buffer_index++, buffer_ptr, buffer_size_ptr)) {
+                    if(!hf_csv__push_char_to_buffer('\"', buffer_index++, buffer_ptr, buffer_size_ptr, allocator_data)) {
                         return false;
                     }
                     char_itr++;
@@ -141,7 +192,7 @@ static bool hf_csv__parse_value(const char** string_ptr, char** buffer_ptr, size
                 }
             }
             else {
-                if(!hf_csv__push_char_to_buffer(*char_itr, buffer_index++, buffer_ptr, buffer_size_ptr)) {
+                if(!hf_csv__push_char_to_buffer(*char_itr, buffer_index++, buffer_ptr, buffer_size_ptr, allocator_data)) {
                     return false;
                 }
             }
@@ -159,7 +210,7 @@ static bool hf_csv__parse_value(const char** string_ptr, char** buffer_ptr, size
                     }
                 }
 
-                if(!hf_csv__push_char_to_buffer('\0', buffer_index++, buffer_ptr, buffer_size_ptr)) {
+                if(!hf_csv__push_char_to_buffer('\0', buffer_index++, buffer_ptr, buffer_size_ptr, allocator_data)) {
                     return false;
                 }
                 *string_ptr = char_itr;
@@ -174,7 +225,7 @@ static bool hf_csv__parse_value(const char** string_ptr, char** buffer_ptr, size
             }
 
             //simply push current value
-            if(!hf_csv__push_char_to_buffer(*char_itr, buffer_index++, buffer_ptr, buffer_size_ptr)) {
+            if(!hf_csv__push_char_to_buffer(*char_itr, buffer_index++, buffer_ptr, buffer_size_ptr, allocator_data)) {
                 return false;
             }
         }
@@ -183,38 +234,7 @@ static bool hf_csv__parse_value(const char** string_ptr, char** buffer_ptr, size
     }
 }
 
-HF_CSV* hf_csv_create(size_t rows, size_t columns) {
-    if(rows == 0 || columns == 0) {
-        return NULL;
-    }
-
-    HF_CSV* new_csv = (HF_CSV*)HF_CSV_MALLOC(sizeof(HF_CSV));
-    if(!new_csv) {//failed alloc
-        return NULL;
-    }
-
-    new_csv->rows = rows;
-    new_csv->columns = columns;
-
-    new_csv->values = (char***)HF_CSV_MALLOC(sizeof(char**) * rows);
-    if(!new_csv->values) {
-        hf_csv_destroy(new_csv);
-        return NULL;
-    }
-    memset(new_csv->values, 0, sizeof(char**) * rows);
-
-    for(size_t row = 0; row < rows; row++) {
-        new_csv->values[row] = (char**)HF_CSV_MALLOC(sizeof(char*) * columns);
-        if(!new_csv->values[row]) {
-            hf_csv_destroy(new_csv);
-            return NULL;
-        }
-        memset(new_csv->values[row], 0, sizeof(char*) * columns);
-    }
-    return new_csv;
-}
-
-HF_CSV* hf_csv_create_from_file(const char* filename) {
+HF_CSV* hf_csv_create_from_file(const char* filename, HF_CSV_AllocatorData* allocator_data) {
     FILE* file = hf_csv__fopen(filename, "r");
     if(file) {
         size_t arr_size = 1;
@@ -229,7 +249,7 @@ HF_CSV* hf_csv_create_from_file(const char* filename) {
         }
 
         //transform file into a null-terminated string
-        char* string = (char*)HF_CSV_MALLOC(arr_size);
+        char* string = (char*)hf_csv__malloc(allocator_data, arr_size);
         if(!string) {
             fclose(file);
             return NULL;
@@ -246,20 +266,58 @@ HF_CSV* hf_csv_create_from_file(const char* filename) {
         string[curr_index] = '\0';
         fclose(file);
 
-        HF_CSV* new_csv = hf_csv_create_from_string(string);
-        HF_CSV_FREE(string);
+        HF_CSV* new_csv = hf_csv_create_from_string(string, allocator_data);
+        hf_csv__free(allocator_data, string);
         return new_csv;
     }
     return NULL;
 }
 
-HF_CSV* hf_csv_create_from_string(const char* string) {
+HF_CSV* hf_csv_create(size_t rows, size_t columns, HF_CSV_AllocatorData* allocator_data) {
+    if(rows == 0 || columns == 0) {
+        return NULL;
+    }
+
+    const bool ca = allocator_data != NULL;
+
+    HF_CSV* new_csv = (HF_CSV*)hf_csv__malloc(allocator_data, ca ? sizeof(HF_CSV_Custom) : sizeof(HF_CSV));
+    if(!new_csv) {//failed alloc
+        return NULL;
+    }
+
+    new_csv->rows = rows;
+    new_csv->columns = columns;
+    new_csv->mode = ca ? HF_CSV_MODE_CUSTOM : HF_CSV_MODE_STD;
+    if(ca) {
+        memcpy(&((HF_CSV_Custom*)new_csv)->allocator_data, allocator_data, sizeof(HF_CSV_AllocatorData));
+    }
+
+    new_csv->values = (char***)hf_csv__malloc(allocator_data, sizeof(char**) * rows);
+    if(!new_csv->values) {
+        hf_csv_destroy(new_csv);
+        return NULL;
+    }
+    memset(new_csv->values, 0, sizeof(char**) * rows);
+
+    for(size_t row = 0; row < rows; row++) {
+        new_csv->values[row] = (char**)hf_csv__malloc(allocator_data, sizeof(char*) * columns);
+        if(!new_csv->values[row]) {
+            hf_csv_destroy(new_csv);
+            return NULL;
+        }
+        memset(new_csv->values[row], 0, sizeof(char*) * columns);
+    }
+
+    return new_csv;
+}
+
+HF_CSV* hf_csv_create_from_string(const char* string, HF_CSV_AllocatorData* allocator_data) {
     if(!string) {
         return NULL;
     }
 
     size_t buffer_size = 128;
-    char* buffer = (char*)HF_CSV_MALLOC(buffer_size);
+    char* buffer = (char*)hf_csv__malloc(allocator_data, buffer_size);
     if(!buffer) {
         return NULL;
     }
@@ -272,9 +330,9 @@ HF_CSV* hf_csv_create_from_string(const char* string) {
     size_t curr_row = 0;
     size_t curr_column = 0; 
     do {
-        bool valid = hf_csv__parse_value(&string_itr, &buffer, &buffer_size);
+        bool valid = hf_csv__parse_value(&string_itr, &buffer, &buffer_size, allocator_data);
         if(!valid) {
-            HF_CSV_FREE(buffer);
+            hf_csv__free(allocator_data, buffer);
             return NULL;
         }
 
@@ -286,7 +344,7 @@ HF_CSV* hf_csv_create_from_string(const char* string) {
         curr_column++;
         if(*string_itr == '\n' || *string_itr == '\0') {
             if(curr_row != 0 && curr_column != column_count) {//invalid amout of columns
-                HF_CSV_FREE(buffer);
+                hf_csv__free(allocator_data, buffer);
                 return NULL;
             }
 
@@ -306,18 +364,18 @@ HF_CSV* hf_csv_create_from_string(const char* string) {
     curr_column = 0;
 
     //second pass, create csv and fill it with data
-    HF_CSV* new_csv = hf_csv_create(row_count, column_count);
+    HF_CSV* new_csv = hf_csv_create(row_count, column_count, allocator_data);
     if(!new_csv) {
-        HF_CSV_FREE(buffer);
+        hf_csv__free(allocator_data, buffer);
         return NULL;
     }
 
     do {
-        hf_csv__parse_value(&string_itr, &buffer, &buffer_size);
+        hf_csv__parse_value(&string_itr, &buffer, &buffer_size, allocator_data);
 
         if(!hf_csv_set_value(new_csv, curr_row, curr_column, buffer)) {//likely allocation error
             hf_csv_destroy(new_csv);
-            HF_CSV_FREE(buffer);
+            hf_csv__free(allocator_data, buffer);
             return NULL;
         }
 
@@ -334,7 +392,7 @@ HF_CSV* hf_csv_create_from_string(const char* string) {
         string_itr++;
     } while(true);
     
-    HF_CSV_FREE(buffer);
+    hf_csv__free(allocator_data, buffer);
     return new_csv;
 }
 
@@ -343,25 +401,27 @@ void hf_csv_destroy(HF_CSV* csv) {
         return;
     }
 
+    HF_CSV_AllocatorData* allocator_data = hf_csv__get_allocator_data(csv);
+
     if(csv->values) {
         for(size_t row = 0; row < csv->rows; row++) {
             if(csv->values[row]) {
                 for(size_t column = 0; column < csv->columns; column++) {
                     if(csv->values[row][column]) {
-                        HF_CSV_FREE(csv->values[row][column]);
+                        hf_csv__free(allocator_data, csv->values[row][column]);
                     }
                 }
-                HF_CSV_FREE(csv->values[row]);
+                hf_csv__free(allocator_data, csv->values[row]);
             }
         }
-        HF_CSV_FREE(csv->values);
+        hf_csv__free(allocator_data, csv->values);
     }
-    HF_CSV_FREE(csv);
+    hf_csv__free(allocator_data, csv);
 
     return;
 }
 
-char* hf_csv_to_string(HF_CSV* csv) {
+char* hf_csv_to_string(HF_CSV* csv, HF_CSV_AllocatorData* allocator_data) {
     if(!csv) {
         return NULL;
     }
@@ -401,7 +461,7 @@ char* hf_csv_to_string(HF_CSV* csv) {
         }
     }
 
-    char* out_string = (char*)HF_CSV_MALLOC(len);
+    char* out_string = (char*)hf_csv__malloc(allocator_data, len);
     if(!out_string) {
         return NULL;
     }
@@ -459,24 +519,24 @@ char* hf_csv_to_string(HF_CSV* csv) {
     return out_string;
 }
 
-void hf_csv_free_string(char* string) {
-    HF_CSV_FREE(string);
+void hf_csv_free_string(char* string, HF_CSV_AllocatorData* allocator_data) {
+    hf_csv__free(allocator_data, string);
 }
 
-bool hf_csv_to_file(HF_CSV* csv, const char* filename) {
+bool hf_csv_to_file(HF_CSV* csv, const char* filename, HF_CSV_AllocatorData* allocator_data) {
     FILE* file = hf_csv__fopen(filename, "w");
     if(!file) {
         return false;
     }
 
-    char* string = hf_csv_to_string(csv);
+    char* string = hf_csv_to_string(csv, allocator_data);
     if(!string) {
         return false;
     }
 
     fprintf(file, "%s", string);
 
-    hf_csv_free_string(string);
+    hf_csv__free(allocator_data, string);
     fclose(file);
     return true;
 }
@@ -534,8 +594,10 @@ bool hf_csv_set_value(HF_CSV* csv, size_t row, size_t column, const char* value)
         return false;
     }
 
+    HF_CSV_AllocatorData* allocator_data = hf_csv__get_allocator_data(csv);
+
     size_t new_size = strlen(value) + 1;
-    char* new_str = (char*)HF_CSV_REALLOC(csv->values[row][column], sizeof(char) * new_size);
+    char* new_str = (char*)hf_csv__realloc(allocator_data, csv->values[row][column], sizeof(char) * new_size);
     if(!new_str) {
         return false;
     }
@@ -564,10 +626,12 @@ bool hf_csv_resize(HF_CSV* csv, size_t rows, size_t columns) {
         return false;
     }
 
+    HF_CSV_AllocatorData* allocator_data = csv->mode == HF_CSV_MODE_CUSTOM ? &((HF_CSV_Custom*)csv)->allocator_data : NULL;
+
     //create a new csv to temporarily store values
-    HF_CSV* new_csv = hf_csv_create(rows, columns);
+    HF_CSV* new_csv = hf_csv_create(rows, columns, allocator_data);
     if(!new_csv) {
-        return false;
+        return false;//
     }
 
     size_t min_rows = csv->rows > rows ? rows : csv->rows;
