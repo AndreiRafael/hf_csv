@@ -32,6 +32,9 @@ typedef struct Allocator_s {
 
 static void* allocator_malloc(void* allocator, size_t size) {
     Allocator* a = (Allocator*)allocator;
+    if(a->allocation_count >= ALLOCATOR_MAX_ALLOCS) {
+        return NULL;
+    }
 
     void* new_alloc = malloc(size);
 
@@ -65,6 +68,11 @@ static void* allocator_realloc(void* allocator, void* mem_ptr, size_t new_size) 
     }
     
     if(new_alloc) {
+        if(a->allocation_count >= ALLOCATOR_MAX_ALLOCS) {
+            free(new_alloc);
+            return NULL;
+        }
+
         a->allocations[a->allocation_count] = (Allocation){ .adress = new_alloc, .size = new_size };
         a->allocation_count++;
         a->full_size += new_size;
@@ -220,6 +228,7 @@ int main(int argc, char* argv[]) {
     for(size_t i = 0; i < test_allocator.allocation_count; i++) {
         printf("NOT FREED(%p): %zu bytes\n", test_allocator.allocations[i].adress, test_allocator.allocations[i].size);
     }
+    free(test_allocator.allocations);
 #endif
 
     return 0;
