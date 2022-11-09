@@ -17,7 +17,7 @@ add_executable(${MY_PROJECT_NAME}_test ./src/main.c)
 # Make compiler scream out every possible warning
 # Make compiler scream out every possible warning
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-	target_compile_options(${MY_PROJECT_NAME}_test PRIVATE -Wstrict-prototypes -Wconversion -Wall -Wextra -Wpedantic -pedantic -Werror -fsanitize=adress)
+	target_compile_options(${MY_PROJECT_NAME}_test PRIVATE -Wstrict-prototypes -Wconversion -Wall -Wextra -Wpedantic -pedantic -Werror)
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 	target_compile_options(${MY_PROJECT_NAME}_test PRIVATE -Wstrict-prototypes -Wconversion -Wall -Wextra -Wpedantic -pedantic -Werror)
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
