@@ -66,9 +66,11 @@ bool hf_csv_get_size(HF_CSV* csv, size_t* rows, size_t* columns);
 //Returns true if operation was successful. Returns false if csv struct is invalid, size is maintained or any of the newly provided dimensions are 0.
 bool hf_csv_resize(HF_CSV* csv, size_t rows, size_t columns);
 
-//Set how allocations will be handled. The provided is simply stored in an internal variable, its values are NOT copied!
-//if allocator_data is NULL, will reset to default allocator that uses HF_CSV_(MALLOC/FREE/REALLOC)
-void hf_csv_set_allocator(HF_CSV_AllocatorData* allocator_data);
+// TODO: 
+void hf_csv_set_allocator_data(HF_CSV_AllocatorData allocator_data);
+
+// TODO:
+HF_CSV_AllocatorData hf_csv_get_allocator_data(void);
 
 #ifdef __cplusplus
 }
@@ -109,14 +111,12 @@ static void* hf_csv__default_realloc(void* allocator, void* prev_mem, size_t siz
     return HF_CSV_REALLOC(prev_mem, size);
 }
 
-static HF_CSV_AllocatorData hf_csv__default_allocator_data = {
+static HF_CSV_AllocatorData hf_csv__current_allocator_data = {
     .allocator = NULL,
     .malloc_ptr = hf_csv__default_malloc,
     .free_ptr = hf_csv__default_free,
     .realloc_ptr = hf_csv__default_realloc,
 };
-
-static HF_CSV_AllocatorData* hf_csv__current_allocator_data = &hf_csv__default_allocator_data;
 
 struct HF_CSV_s {
     char*** values;
@@ -137,15 +137,15 @@ static inline FILE* hf_csv__fopen(const char* filename, const char* mode) {
 }
 
 static inline void* hf_csv__malloc(size_t size) {
-    return hf_csv__current_allocator_data->malloc_ptr(hf_csv__current_allocator_data->allocator, size);
+    return hf_csv__current_allocator_data.malloc_ptr(hf_csv__current_allocator_data.allocator, size);
 }
 
 static inline void* hf_csv__realloc(void* mem_ptr, size_t new_size) {
-    return hf_csv__current_allocator_data->realloc_ptr(hf_csv__current_allocator_data->allocator, mem_ptr, new_size);
+    return hf_csv__current_allocator_data.realloc_ptr(hf_csv__current_allocator_data.allocator, mem_ptr, new_size);
 }
 
 static inline void hf_csv__free(void* mem_ptr) {
-    return hf_csv__current_allocator_data->free_ptr(hf_csv__current_allocator_data->allocator, mem_ptr);
+    return hf_csv__current_allocator_data.free_ptr(hf_csv__current_allocator_data.allocator, mem_ptr);
 }
 
 //push a char to buffer at index, resize buffer if necessary. returns false if buffer resize failed
@@ -642,8 +642,12 @@ bool hf_csv_resize(HF_CSV* csv, size_t rows, size_t columns) {
     return true;
 }
 
-void hf_csv_set_allocator(HF_CSV_AllocatorData* allocator_data) {
-    hf_csv__current_allocator_data = allocator_data ? allocator_data : &hf_csv__default_allocator_data;
+HF_CSV_AllocatorData hf_csv_get_allocator_data(void) {
+    return hf_csv__current_allocator_data;
+}
+
+void hf_csv_set_allocator_data(HF_CSV_AllocatorData allocator_data) {
+    hf_csv__current_allocator_data = allocator_data;
 }
 
 #endif//HF_CSV_IMPLEMENTATION

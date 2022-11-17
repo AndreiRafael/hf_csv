@@ -111,7 +111,7 @@ static void allocator_free(void* allocator, void* mem_ptr) {
 
 static Allocator test_allocator;
 
-#define TEST_ALLOCATOR (&(HF_CSV_AllocatorData){ &test_allocator, allocator_malloc, allocator_realloc, allocator_free})
+#define TEST_ALLOCATOR (HF_CSV_AllocatorData){ &test_allocator, allocator_malloc, allocator_realloc, allocator_free}
 #else
 #define TEST_ALLOCATOR NULL
 #endif
@@ -125,7 +125,7 @@ int main(int argc, char* argv[]) {
     test_allocator.full_size = 0;
     test_allocator.allocations = malloc(sizeof(Allocation) * ALLOCATOR_MAX_ALLOCS);
     memset(test_allocator.allocations, 0, sizeof(Allocation) * ALLOCATOR_MAX_ALLOCS);
-    hf_csv_set_allocator(TEST_ALLOCATOR);
+    hf_csv_set_allocator_data(TEST_ALLOCATOR);
 #endif
 
     //test creating a new csv from scratch
