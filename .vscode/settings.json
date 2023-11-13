@@ -1,3 +1,5 @@
 {
-    "cmake.generator": "MinGW Makefiles"
+    "files.associations": {
+        "hf_csv.h": "c"
+    }
 }

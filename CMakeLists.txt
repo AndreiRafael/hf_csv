@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.1)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-set(MY_PROJECT_NAME HF_CSV) 
+set(MY_PROJECT_NAME HF_CSV)
 project(${MY_PROJECT_NAME} C)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -12,7 +12,7 @@ else()
 	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/release)
 endif()
 
-add_executable(${MY_PROJECT_NAME}_test ./src/main.c)
+add_executable(${MY_PROJECT_NAME}_test ./src/main.c ./src/hf_csv.c)
 
 # Make compiler scream out every possible warning
 # Make compiler scream out every possible warning
